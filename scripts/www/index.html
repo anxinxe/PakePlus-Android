@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>蛇喂食记录</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui, sans-serif}
+body{background:#121212;color:#eee;padding:16px;max-width:600px;margin:0 auto}
+.card{background:#1e1e1e;border-radius:14px;padding:16px;margin-bottom:14px}
+h2{font-size:19px;margin-bottom:12px;color:#4fc3f7}
+.item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #333}
+.item:last-child{border-bottom:none}
+.btn{border:none;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer;touch-action:manipulation}
+.btn-feed{background:#2e7d32;color:#fff}
+.btn-add{background:#29b6f6;color:#000}
+.btn-log{background:#7b1fa2;color:#fff}
+.btn-del{background:#c62828;color:#fff;padding:6px 10px}
+input{width:100%;padding:11px;border-radius:10px;border:1px solid #444;background:#252525;color:#fff;margin:8px 0;font-size:16px}
+/* 弹窗遮罩 */
+.modal-mask{
+    position:fixed;inset:0;background:rgba(0,0,0,0.75);
+    display:none;align-items:center;justify-content:center;
+    padding:16px;z-index:999
+}
+.modal{
+    width:100%;max-width:520px;max-height:80vh;overflow-y:auto;
+    background:#1e1e1e;border-radius:14px;padding:18px
+}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.btn-close{background:#444;color:#fff;padding:8px 12px;border-radius:8px;border:none}
+.log-row{font-size:14px;color:#ccc;padding:7px 0;border-bottom:1px solid #333}
+.log-row:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<h2>🐍 宠物蛇喂食记录</h2>
+<div class="card">
+<input id="snakeName" placeholder="输入蛇名字，例：玉米蛇-小橙">
+<button class="btn btn-add" onclick="addSnake()">添加新蛇</button>
+</div>
+
+<div class="card">
+    <button class="btn btn-log" onclick="openLogModal()">📜 打开全部喂食日志</button>
+</div>
+
+<div id="snakeList"></div>
+
+<!-- 独立弹窗：喂食日志 -->
+<div class="modal-mask" id="logMask">
+    <div class="modal">
+        <div class="modal-head">
+            <h2>全部喂食日志</h2>
+            <button class="btn-close" onclick="closeLogModal()">关闭</button>
+        </div>
+        <div id="logList"></div>
+    </div>
+</div>
+
+<script>
+const STORAGE_KEY = "snakeFeedData";
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"snakes":[],"logs":[]}');
+
+function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function addSnake(){
+    const name = document.getElementById("snakeName").value.trim();
+    if(!name) return alert("名字不能为空");
+    const newId = data.snakes.reduce((m,s)=>Math.max(m,s.id),0)+1;
+    data.snakes.push({id:newId,name});
+    document.getElementById("snakeName").value="";
+    save(); render();
+}
+
+function feed(snakeId){
+    const now = new Date();
+    const timeStr = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,'0')+"-"+String(now.getDate()).padStart(2,'0')+" "+String(now.getHours()).padStart(2,'0')+":"+String(now.getMinutes()).padStart(2,'0');
+    data.logs.push({snakeId, time:timeStr});
+    save(); render();
+}
+
+function delSnake(id){
+    if(!confirm("确定删除这条蛇以及全部喂食记录？")) return;
+    data.snakes = data.snakes.filter(s=>s.id!==id);
+    data.logs = data.logs.filter(l=>l.snakeId!==id);
+    save(); render();
+}
+
+// 弹窗控制
+function openLogModal(){
+    document.getElementById("logMask").style.display="flex";
+    renderLog();
+}
+function closeLogModal(){
+    document.getElementById("logMask").style.display="none";
+}
+
+// 渲染日志弹窗内容
+function renderLog(){
+    const ll = document.getElementById("logList");
+    ll.innerHTML = "";
+    const sorted = [...data.logs].sort((a,b)=>new Date(b.time)-new Date(a.time));
+    if(sorted.length === 0){
+        ll.innerHTML = "<div style='color:#aaa'>暂无喂食记录</div>";
+        return;
+    }
+    sorted.forEach(l=>{
+        const sn = data.snakes.find(x=>x.id===l.snakeId);
+        const name = sn ? sn.name : "【已删除】";
+        const row = document.createElement("div");
+        row.className="log-row";
+        row.innerText = `${l.time} | ${name}`;
+        ll.appendChild(row);
+    })
+}
+
+// 主页面渲染（蛇列表 + 间隔天数）
+function render(){
+    const sl = document.getElementById("snakeList");
+    sl.innerHTML = "";
+    data.snakes.forEach(s=>{
+        const snakeLogs = data.logs.filter(x=>x.snakeId===s.id).sort((a,b)=>new Date(b.time)-new Date(a.time));
+        let lastText = "暂无喂食记录";
+        if(snakeLogs[0]){
+            const lastDate = new Date(snakeLogs[0].time);
+            const diffDay = Math.floor((new Date() - lastDate)/(1000*60*60*24));
+            lastText = `${snakeLogs[0].time}（距现在 ${diffDay} 天）`;
+        }
+        const div = document.createElement("div");
+        div.className="card";
+        div.innerHTML = `
+            <div class="item">
+                <div>
+                    <div style="font-weight:bold;font-size:16px">${s.name}</div>
+                    <div style="font-size:12px;color:#aaa;margin-top:4px">上次喂食：${lastText}</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn btn-feed" onclick="feed(${s.id})">✅ 今天喂了</button>
+                    <button class="btn btn-del" onclick="delSnake(${s.id})">🗑</button>
+                </div>
+            </div>
+        `;
+        sl.appendChild(div);
+    })
+}
+
+// 点击遮罩空白关闭弹窗
+document.getElementById("logMask").addEventListener('click',function(e){
+    if(e.target === this) closeLogModal();
+})
+
+render();
+</script>
+</body>
+</html>
